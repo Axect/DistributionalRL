@@ -14,7 +14,7 @@ This project uses:
 This program accepts command line arguments. To run it:
 
 ```
-cargo run --release -- <rounds>
+cargo run --release <rounds>
 ```
 
 Replace `<rounds>` with the number of rounds you want to simulate.
