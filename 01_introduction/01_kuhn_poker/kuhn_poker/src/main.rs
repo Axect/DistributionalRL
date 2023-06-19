@@ -1,7 +1,9 @@
 use rand::prelude::*;
-use std::io::Write;
+use std::io::{self, Write};
+use std::rc::Rc;
+use std::cell::RefCell;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct Player {
     name: String,
     hand: Card,
@@ -9,7 +11,7 @@ struct Player {
     money: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Card {
     Jack,
     Queen,
@@ -66,6 +68,10 @@ impl Player {
         self.money == 0
     }
 
+    fn draw(&mut self) {
+        self.hand = Card::draw();
+    }
+
     fn bet(&mut self, amount: u32) -> bool {
         if self.money < amount {
             false
@@ -75,233 +81,12 @@ impl Player {
         }
     }
 
-    // Raise if true, check if false
-    fn raise(&self) -> bool {
-        if self.is_ai {
-            let mut rng = thread_rng();
-            match self.hand {
-                Card::Jack => rng.gen_bool(0.4),
-                Card::Queen => rng.gen_bool(0.7),
-                Card::King => true,
-            }
-        } else {
-            println!("Your card is {}", self.hand().name());
-            println!("Do you want to raise? (y/n)");
-            print!("> ");
-
-            std::io::stdout().flush().unwrap();
-
-            let mut input = String::new();
-            std::io::stdin()
-                .read_line(&mut input)
-                .expect("Failed to read line");
-            input = input.trim().to_string();
-            if input != "y" && input != "n" {
-                println!("Invalid input");
-                self.raise()
-            } else {
-                input == "y"
-            }
-        }
-    }
-
-    // Call if true, fold if false
-    fn call(&self) -> bool {
-        if self.is_ai {
-            let mut rng = thread_rng();
-            match self.hand {
-                Card::Jack => rng.gen_bool(0.1),
-                Card::Queen => rng.gen_bool(0.5),
-                Card::King => true,
-            }
-        } else {
-            println!("Do you want to call? (y/n)");
-            print!("> ");
-
-            std::io::stdout().flush().unwrap();
-
-            let mut input = String::new();
-            std::io::stdin()
-                .read_line(&mut input)
-                .expect("Failed to read line");
-            input = input.trim().to_string();
-            if input != "y" && input != "n" {
-                println!("Invalid input");
-                self.call()
-            } else {
-                input == "y"
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Game {
-    players: (Player, Player),
-}
-
-impl Game {
-    fn new(players: (Player, Player)) -> Self {
-        Game { players }
-    }
-
-    fn play(&mut self) {
-        // Check money of players
-        if self.players.0.is_broke() {
-            println!("{} is broke", self.players.0.name());
-            println!("{} wins", self.players.1.name());
-            return;
-        } else if self.players.1.is_broke() {
-            println!("{} is broke", self.players.1.name());
-            println!("{} wins", self.players.0.name());
-            return;
-        }
-
-        // Draw cards
-        self.players.0.hand = Card::draw();
-        self.players.1.hand = Card::draw();
-
-        // Bet (default)
-        let mut pot = 0;
-        let mut bet = 1;
-        self.players.0.bet(bet);
-        self.players.1.bet(bet);
-        pot += bet * 2;
-
-        loop{
-            // Show own card and raise or check
-            let p1_raise = if self.players.0.money < bet || self.players.1.money < bet { 
-                false
-            } else {
-                self.players.0.raise()
-            };
-
-            if p1_raise {
-                println!("{} raises", self.players.0.name());
-                self.players.0.bet(bet);
-                pot += bet;
-                let p2_call = self.players.1.call();
-                if p2_call {
-                    println!("{} calls", self.players.1.name());
-                    self.players.1.bet(bet);
-                    pot += bet;
-                    bet *= 2;
-                    println!("Now the bet is {}", bet);
-                    continue;
-                } else {
-                    println!("{} folds", self.players.1.name());
-                    println!("{} wins", self.players.0.name());
-                    self.players.0.money += pot;
-                    return;
-                }
-            } else {
-                println!("{} checks", self.players.0.name());
-                let p2_raise = if self.players.0.money < bet || self.players.1.money < bet {
-                    false 
-                } else {
-                    self.players.1.raise()
-                };
-                if p2_raise {
-                    println!("{} raises", self.players.1.name());
-                    self.players.1.bet(bet);
-                    pot += bet;
-                    let p1_call = self.players.0.call();
-                    if p1_call {
-                        println!("{} calls", self.players.0.name());
-                        self.players.0.bet(bet);
-                        pot += bet;
-                        bet *= 2;
-                        println!("Now the bet is {}", bet);
-                        continue;
-                    } else {
-                        println!("{} folds", self.players.0.name());
-                        println!("{} wins", self.players.1.name());
-                        self.players.1.money += pot;
-                        return;
-                    }
-                } else {
-                    println!("{} checks", self.players.1.name());
-                    println!("------------------");
-                    println!("{}'s card is {}", self.players.0.name(), self.players.0.hand().name());
-                    println!("{}'s card is {}", self.players.1.name(), self.players.1.hand().name());
-                    if self.players.0.hand().value() > self.players.1.hand().value() {
-                        println!("{} wins", self.players.0.name());
-                        self.players.0.money += pot;
-                    } else if self.players.0.hand().value() < self.players.1.hand().value() {
-                        println!("{} wins", self.players.1.name());
-                        self.players.1.money += pot;
-                    } else {
-                        println!("Draw");
-                        self.players.0.money += pot / 2;
-                        self.players.1.money += pot / 2;
-                    }
-                    return;
-                }
-            }
-        }
-    }
-}
-
-fn main() {
-    println!("Welcome to the game!");
-
-    println!("Please set the amount of money");
-    print!("> ");
-
-    std::io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-    input = input.trim().to_string();
-    let money = input.parse::<u32>().unwrap();
-
-    println!("Please enter your name");
-    print!("> ");
-
-    std::io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-    input = input.trim().to_string();
-    let player = Player::new(input, false, money);
-
-    println!("Please enter your opponent's name");
-    print!("> ");
-
-    std::io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
-    input = input.trim().to_string();
-    let opponent = Player::new(input, true, money);
-
-    let mut game = Game::new(
-        (player, opponent),
-    );
-    loop {
-        game.play();
-        println!("------------------");
-        println!("{}'s money is {}", game.players.0.name(), game.players.0.money);
-        println!("{}'s money is {}", game.players.1.name(), game.players.1.money);
-        println!("------------------");
-        if game.players.0.is_broke() {
-            println!("{} is broke", game.players.0.name());
-            println!("Finally {} wins", game.players.1.name());
-            break;
-        } else if game.players.1.is_broke() {
-            println!("{} is broke", game.players.1.name());
-            println!("Finally {} wins", game.players.0.name());
-            break;
-        }
-        println!("Do you want to continue? (y/n)");
+    fn get_input(&self, message: &str) -> bool {
+        println!("{}", message);
         print!("> ");
+
         std::io::stdout().flush().unwrap();
+
         let mut input = String::new();
         std::io::stdin()
             .read_line(&mut input)
@@ -309,9 +94,211 @@ fn main() {
         input = input.trim().to_string();
         if input != "y" && input != "n" {
             println!("Invalid input");
-            continue;
-        } else if input == "n" {
+            self.get_input(message)
+        } else {
+            input == "y"
+        }
+    }
+
+    // Raise if true, check if false
+    fn raise(&self, rng: &mut ThreadRng) -> bool {
+        if self.is_ai {
+            match self.hand {
+                Card::Jack => rng.gen_bool(0.3),
+                Card::Queen => rng.gen_bool(0.8),
+                Card::King => true,
+            }
+        } else {
+            self.get_input(&format!("Your card is {}. Do you want to raise? (y/n)", self.hand.name()))
+        }
+    }
+
+    // Call if true, fold if false
+    fn call(&self, rng: &mut ThreadRng) -> bool {
+        if self.is_ai {
+            match self.hand {
+                Card::Jack => rng.gen_bool(0.1),
+                Card::Queen => rng.gen_bool(0.6),
+                Card::King => true,
+            }
+        } else {
+            self.get_input("Do you want to call? (y/n)")
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Game {
+    players: Vec<Rc<RefCell<Player>>>,
+}
+
+impl Game {
+    fn new(players: Vec<Rc<RefCell<Player>>>) -> Self {
+        Game { players }
+    }
+
+    fn play(&mut self, rng: &mut ThreadRng) {
+        let mut bet = 1;
+        let mut pot = bet * 2;
+
+        let mut p0 = self.players[0].borrow_mut();
+        let mut p1 = self.players[1].borrow_mut();
+
+        p0.draw();
+        p1.draw();
+
+        if !(p0.bet(bet) && p1.bet(bet)) {
+            return;
+        }
+
+        loop {
+            let (first, second) = (&mut p0, &mut p1);
+            let (first_name, second_name) = (first.name().to_string(), second.name().to_string());
+
+            if first.money < bet || second.money < bet {
+                break;
+            }
+
+            if first.raise(rng) {
+                println!("{} raises", first_name);
+                if first.bet(bet) {
+                    pot += bet;
+                } else {
+                    return;
+                }
+                if second.call(rng) {
+                    println!("{} calls", second_name);
+                    if second.bet(bet) {
+                        pot += bet;
+                    } else {
+                        return;
+                    }
+                    bet *= 2;
+                    println!("Now the bet is {}", bet);
+                    continue;
+                } else {
+                    println!("{} folds", second_name);
+                    println!("{} wins", first_name);
+                    first.money += pot;
+                    return;
+                }
+            } else {
+                println!("{} checks", first_name);
+                if second.raise(rng) {
+                    println!("{} raises", second_name);
+                    if second.bet(bet) {
+                        pot += bet;
+                    } else {
+                        return;
+                    }
+                    if first.call(rng) {
+                        println!("{} calls", first_name);
+                        if first.bet(bet) {
+                            pot += bet;
+                        } else {
+                            return;
+                        }
+                        bet *= 2;
+                        println!("Now the bet is {}", bet);
+                        continue;
+                    } else {
+                        println!("{} folds", first_name);
+                        println!("{} wins", second_name);
+                        second.money += pot;
+                        return;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        println!("{} checks", p1.name());
+        println!("------------------");
+        println!("{}'s card is {}", p0.name(), p0.hand().name());
+        println!("{}'s card is {}", p1.name(), p1.hand().name());
+
+        match p0.hand().value().cmp(&p1.hand().value()) {
+            std::cmp::Ordering::Greater => {
+                println!("{} wins", p0.name());
+                p0.money += pot;
+            }
+            std::cmp::Ordering::Less => {
+                println!("{} wins", p1.name());
+                p1.money += pot;
+            }
+            std::cmp::Ordering::Equal => {
+                println!("Draw");
+                p0.money += pot / 2;
+                p1.money += pot / 2;
+            }
+        }
+    }
+}
+
+fn prompt(msg: &str) -> String {
+    println!("{}", msg);
+    print!("> ");
+    io::stdout().flush().unwrap();
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+    input.trim().to_owned()
+}
+
+fn get_money() -> u32 {
+    loop {
+        match prompt("Please set the amount of money").parse() {
+            Ok(money) => return money,
+            Err(_) => println!("Invalid input, please enter a number"),
+        }
+    }
+}
+
+fn get_name(prompt_msg: &str) -> String {
+    prompt(prompt_msg)
+}
+
+fn main() {
+    println!("Welcome to the game!");
+
+    let money = get_money();
+
+    let player = Player::new(get_name("Please enter your name"), false, money);
+    let opponent = Player::new(get_name("Please enter your opponent's name"), true, money);
+
+    let players = vec![Rc::new(RefCell::new(player)), Rc::new(RefCell::new(opponent))];
+
+    let mut rng = thread_rng();
+
+    let mut game = Game::new(players);
+
+    loop {
+        game.play(&mut rng);
+
+        println!("------------------");
+        let p0 = game.players[0].borrow();
+        let p1 = game.players[1].borrow();
+        println!("{}'s money is {}", p0.name(), p0.money);
+        println!("{}'s money is {}", p1.name(), p1.money);
+        println!("------------------");
+
+        if p0.is_broke() {
+            println!("{} is broke", p0.name());
+            println!("Finally {} wins", p1.name());
             break;
+        } else if p1.is_broke() {
+            println!("{} is broke", p1.name());
+            println!("Finally {} wins", p0.name());
+            break;
+        }
+
+        match prompt("Do you want to continue? (y/n)").as_str() {
+            "y" => continue,
+            "n" => break,
+            _ => println!("Invalid input"),
         }
     }
 }
