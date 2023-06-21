@@ -167,9 +167,8 @@ impl RandomPolicy for QuickPolicy {
         } else {
             match (x, y) {
                 (0, 0)                      => Action::Up,
-                (x, 1) if x < 11            => Action::Right,
+                (x, _) if x < 11            => Action::Right,
                 (11, y) if y > 0            => Action::Down,
-                (x, y) if x < 11 && y > 1   => Action::Down,
                 _ => unreachable!(),
             }
         }
